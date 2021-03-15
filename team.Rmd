@@ -1,0 +1,250 @@
+---
+title: 'DS 202- Lab #4'
+author: "Kerstin Swanson"
+date: "3/14/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(readr)
+library(readxl)
+library(tidyverse)
+defense <- read_excel('cyclonesFootball2020.xlsx', sheet='Defensive')
+offense <- read_excel('cyclonesFootball2020.xlsx', sheet='Offensive')
+bio <- read_excel('cyclonesFootball2020.xlsx', sheet='Biography')
+```
+
+
+## Part One
+
+```{r, warning=FALSE}
+defClean<- defense %>% 
+  mutate(Name= as.factor(Name), Opponent_Opponent = as.factor(Opponent_Opponent),across(c(3:11), as.numeric)) 
+
+offClean <- offense %>% 
+  mutate(Name= as.factor(Name), Opponent_Opponent = as.factor(Opponent_Opponent),across(c(3:12), as.numeric))
+  
+bioClean <- bio %>% 
+  mutate(Name = as.factor(Name), Weight= as.numeric(Weight)) %>%  separate(as.numeric(Height), c("feet", "inches"), sep="([-])", convert=TRUE) %>% 
+  mutate(inches2 = feet*12, Height = inches2+inches) %>% 
+  select(-c(inches, inches2, feet)) 
+
+str(defClean)
+str(offClean)
+str(bioClean)
+```
+
+
+## Part Two
+
+1.
+```{r}
+long_offClean <- pivot_longer(offClean, cols = c(3:12), names_to="Type", values_to="Stat")
+```
+
+
+
+2. 
+```{r}
+long_offClean %>% 
+  ggplot(aes(x=Stat)) + geom_histogram(binwidth =20)+facet_wrap(~Type) + labs(title="Offensive Statistics")
+```
+
+
+Here we can see that all of our statistics are skewed right, which makes sense because you can't have less than zero yards or zero occurrences of receptions, touchdowns, or rushing. On occurrences of touchdowns, receptions, and interceptions, there is not much of a distribution in the histogram because they are binary events (1= they caught/passed/intercepted, 0=they didn't), so those statistics throughout a game are not enough to create more than one bar on our histograms (binwidth of 20). Passing yards is the statistic with the most variability, followed by rushing yards, which makes sense because those are the two ways to rack up the most yards. A quarterback could throw for a couple hundred yards throughout the game, as we can see in the passing yards statistic, and certain running backs can rush for over 100 yards per game, which we can see in the rushing yards statistic.
+
+
+
+
+
+3.
+
+```{r}
+long_offClean %>% 
+  filter(Opponent_Opponent %in% c("Oklahoma", "Oregon") & Type == "Receiving_YDS") %>% 
+  group_by(Name) %>% 
+  slice(-1) %>% 
+  group_by(Opponent_Opponent) %>% 
+  ggplot(aes(Stat, Opponent_Opponent, color=Opponent_Opponent)) + geom_point() + labs(title = "ISU Offense against Oregon vs Oklahoma", x="Yards Received", y="Opponent") + theme(legend.position = "none")
+```
+
+
+ I removed the first ISU vs Oklahoma game of the 2020 season, since we played them twice. Since the question was comparing them to Oregon, I chose the stats from Big 12 Championship game against Oklahoma since that game was the one right before the bowl game against Oregon. We can see that our offense played better against Oklahoma when looking at receiving yards, because two players received over 90 yards in that game, where the highest receiving yards against Oregon was about 53.
+ 
+ 
+
+
+4.
+
+```{r}
+bioClean %>% 
+  separate(Hometown, into = c("City", "State"), sep = ",") %>% 
+  select(City, State) %>% 
+  head()
+```
+
+
+
+5. 
+
+```{r}
+bioClean %>% 
+  separate(Hometown, into = c("City", "State"), sep = ",") %>% 
+  group_by(State) %>% 
+  summarise(Num_Players = n())
+```
+
+
+
+
+
+## Part Three
+
+
+
+1.
+```{r}
+bioClean %>% 
+  separate(Hometown, into = c("City", "State"), sep = ",") %>% 
+  group_by(State) %>% 
+  summarise(Num_Players = n()) %>% 
+  ggplot(aes(reorder(State, Num_Players), weight=Num_Players, fill=State)) + geom_bar() + labs(title="ISU Football Player Origins", x= "Hometown State", y="Number of Players") + coord_flip() 
+```
+
+
+
+Based on the graph above, we can see that Iowa provides the most players to the football team, followed by Florida, Minnesota, and Texas. The least prevalent states of origin are Arkansas, Michigan, and Mississippi.
+
+
+
+2. 
+
+```{r}
+
+ p <- offClean %>% 
+  filter(Name=="Purdy, Brock" & Opponent_Opponent != "Oklahoma") %>% 
+  group_by(Opponent_Opponent) %>% 
+  ggplot(aes(x=Rushing_YDS, y=Rushing_TD, color=Opponent_Opponent)) + geom_point(shape="circle")
+
+q <- offClean %>% 
+  group_by(Opponent_Opponent) %>% 
+  filter(Opponent_Opponent != "Oklahoma", Name !="Purdy, Brock") %>% 
+  summarise(rush_yds_game = sum(Rushing_YDS, na.rm = TRUE), rush_tds_game = sum(Rushing_TD, na.rm=TRUE)) 
+
+p + geom_point(aes(x=q$rush_yds_game, y=q$rush_tds_game), shape = "square") + labs(title ="Brock Purdy Perfomance vs Offensive Line", x="Rushing Yards", y="Rushing Touchdowns")
+
+
+offClean[is.na(offClean)] <- 0
+ r <- offClean %>% 
+  filter(Name=="Purdy, Brock" & Opponent_Opponent != "Oklahoma") %>% 
+  group_by(Opponent_Opponent) %>% 
+  ggplot(aes(x=Passing_YDS, y=Receiving_TD, color=Opponent_Opponent)) + geom_point(shape="circle")
+ 
+
+ 
+q <- offClean %>% 
+  group_by(Opponent_Opponent) %>% 
+  filter(Opponent_Opponent != "Oklahoma", Name !="Purdy, Brock") %>% 
+  summarise(pass_yds_game = sum(Passing_YDS, na.rm = TRUE), rec_tds_game = sum(Receiving_TD, na.rm=TRUE))
+
+set.seed(3)
+r + geom_point(aes(x=q$pass_yds_game, y=q$rec_tds_game), shape = "square",  position=position_jitter(h=0.2,w=0.15)) + labs(title ="Brock Purdy Perfomance vs Offensive Line", x="Passing Yards", y="Receiving Touchdowns")
+ 
+```
+
+
+
+For my first graph,  I plotted Brock Purdy's rushing yards in each game (without the two Oklahoma games, too complicated), and his statistics are shaped as a circle, vs the statistics of the offensive line for each of the games, denoted by the square shape. Here, we can see that when Brock Purdy rushed the most, in the Kansas State game, the rest of the team had the most rushing touchdowns (4), and also over 200 rushing yards. We can see the game where Brock Purdy rushed the least agaisnt TCU, the offensive line had the most rushing yards around 240. This makes sense, because if Brock isn't rushing himself, he probably handed the ball to a running back. The offensive line's worst game was against Texas, with only 100 rushing yards and 1 rushing touchdown. 
+
+For my second graph, I plotted Brock Purdy's passing yards by game (circle) vs the receiving touchdowns by the offensive line (square). These statistics are not necessarily positively correlated. Brock's game with the highest passing yards, about 310 against Texas, the offensive line only had one receiving touchdown. His game with the least amount of passing yards, less than 150 against Louisiana, the offensive line achieved 3 receiving touchdowns. 
+
+So, just because Brock Purdy is having a stellar game, doesn't mean the offensive line also follows suit, and vice versa. But, when Brock plays pretty steady (not too much passing, not too much rushing), that's when the offensive line tends to shine. 
+
+
+3. 
+
+```{r}
+defense19 <- read_excel('cyclonesFootball2019.xlsx', sheet='Defensive')
+offense19 <- read_excel('cyclonesFootball2019.xlsx', sheet='Offensive')
+bio19 <- read_excel('cyclonesFootball2019.xlsx', sheet='Biography')
+
+defClean19<- defense19 %>% 
+  mutate(Name= as.factor(Name), Opponent_Opponent = as.factor(Opponent_Opponent),across(c(3:11), as.numeric)) 
+
+offClean19 <- offense19 %>% 
+  mutate(Name= as.factor(Name), Opponent_Opponent = as.factor(Opponent_Opponent),across(c(3:12), as.numeric))
+  
+bioClean19 <- bio19 %>% 
+  mutate(Name = as.factor(Name), Weight= as.numeric(Weight)) %>%  separate(as.numeric(Height), c("feet", "inches"), sep="([-])", convert=TRUE) %>% 
+  mutate(inches2 = feet*12, Height = inches2+inches) %>% 
+  select(-c(inches, inches2, feet)) 
+
+
+```
+
+
+```{r}
+offClean$Year = rep("2020")
+offClean19$Year = rep("2019")
+
+
+totalOff <- rbind(offClean,offClean19)
+
+totalOff %>% 
+  group_by(Name, Year) %>% 
+  rowwise() %>% 
+  mutate(total_td = sum(c(Receiving_TD, Rushing_TD), na.rm=TRUE)) %>% 
+  ungroup() %>%
+  group_by(Name, Year) %>% 
+  summarise(avg_rush = mean(Rushing_YDS, na.rm=TRUE), total_rush = sum(Rushing_YDS, na.rm = TRUE), avg_rec = mean(Receiving_YDS, na.rm=TRUE), total_rec = sum(Receiving_YDS, na.rm=TRUE), total_td = sum(total_td)) %>% 
+  ggplot(aes(x=Year, y=total_td, color = Name)) + geom_point() + labs(title = "Total Touchdown Improvement by Player", x= "Year", y= "Total Touchdowns")
+
+
+```
+
+
+
+
+Most of the offensive summary statistics did not change much between 2019 and 2020 besides total touchdowns. And, no surprise, the most improved player is Breece Hall, with more than a 10 touchdown difference between 2019 and 2020.
+
+
+
+
+```{r}
+defClean$Year = rep("2020")
+defClean19$Year = rep("2019")
+
+
+totalDef <- rbind(defClean,defClean19)
+totalDef[is.na(totalDef)] = 0
+newDef <- totalDef %>% 
+  group_by(Name, Year) %>% 
+  rowwise() %>% 
+  mutate(total_tackles = sum(c(Tackles_Solo, Tackles_ASST, Tackles_TFL, Tackles_Sack)), total_turnovers = sum(c(Turnover_FF, Turnover_FR, Turnover_INT))) %>% 
+  ungroup() %>% 
+  group_by(Name, Year) %>% 
+  summarise(avg_tackle = mean(total_tackles), total_tackle = sum(total_tackles), avg_turnover = mean(total_turnovers), total_turnover = sum(total_turnovers)) 
+
+
+ggplot(newDef, aes(x=Name, y=total_tackle, color = Year)) + geom_point() +  coord_flip() + labs(title = "Total Season Tackles by Player", x="Name", y="Total Tackles")+  theme(
+  axis.text = element_text(size = 6))
+
+ggplot(newDef, aes(x=Name, y=total_turnover, color = Year)) + geom_point() +  coord_flip() + labs(title = "Total Season Turnovers by Player", x="Name", y="Total Turnovers")+  theme(
+  axis.text = element_text(size = 6))
+```
+
+
+Based on total tackles in 2020 vs 2019, Jake Hummel seems to be the most improved defensive player, with about 40 more tackles in 2020 than in 2019. Based on total turnovers in 2020 vs 2019, Mike Rose (no surprise there) seems to be the most improved player, with 3 more turnovers in 2020 than in 2019.
+
+
+
+
+
+
+
